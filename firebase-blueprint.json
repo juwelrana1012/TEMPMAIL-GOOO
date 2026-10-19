@@ -1,0 +1,52 @@
+{
+  "entities": {
+    "CountryNameStat": {
+      "title": "CountryNameStat",
+      "description": "Stores current generated name counter and used names history per country and gender",
+      "type": "object",
+      "properties": {
+        "countryId": {
+          "type": "string",
+          "description": "Identifier of the country (e.g. bangladesh, usa)"
+        },
+        "gender": {
+          "type": "string",
+          "description": "Gender: male or female"
+        },
+        "usedCount": {
+          "type": "number",
+          "description": "Number of names generated so far up to 10000"
+        },
+        "remainingCount": {
+          "type": "number",
+          "description": "Remaining names count out of 10000"
+        },
+        "totalCount": {
+          "type": "number",
+          "description": "Total available names for this category, always 10000"
+        },
+        "lastGeneratedName": {
+          "type": "string",
+          "description": "The latest generated full name"
+        },
+        "updatedAt": {
+          "type": "number",
+          "description": "Timestamp of the last generation"
+        }
+      },
+      "required": [
+        "countryId",
+        "gender",
+        "usedCount",
+        "remainingCount",
+        "totalCount"
+      ]
+    }
+  },
+  "firestore": {
+    "/nameGeneratorStats/{statId}": {
+      "schema": "CountryNameStat",
+      "description": "Country and gender specific name generation counters and recent history"
+    }
+  }
+}

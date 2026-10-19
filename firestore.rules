@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidStat(data) {
+      return data.countryId is string && data.countryId.size() <= 100
+        && data.gender is string && (data.gender == 'male' || data.gender == 'female')
+        && data.usedCount is number && data.usedCount >= 0 && data.usedCount <= 10000
+        && data.remainingCount is number && data.remainingCount >= 0 && data.remainingCount <= 10000
+        && data.totalCount is number && data.totalCount == 10000;
+    }
+
+    match /nameGeneratorStats/{statId} {
+      allow get: if isValidId(statId);
+      allow list: if true;
+      allow create, update: if isValidId(statId) && isValidStat(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

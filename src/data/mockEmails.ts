@@ -1,0 +1,103 @@
+import { TempEmailAccount, MailProviderConfig } from '../types';
+
+export const MAIL_PROVIDERS: MailProviderConfig[] = [
+  {
+    id: 'tempmail-plus',
+    name: 'Temp Mail Plus',
+    url: 'https://tempmail.plus/en/#!',
+    defaultDomain: 'mailto.plus',
+    availableDomains: ['mailto.plus', 'fexpost.com', 'fexbox.org'],
+    color: '#8b5cf6',
+  },
+  {
+    id: 'guerrilla-mail',
+    name: 'Guerrilla Mail',
+    url: 'https://www.guerrillamail.com/',
+    defaultDomain: 'guerrillamailblock.com',
+    availableDomains: ['guerrillamailblock.com', 'sharklasers.com', 'guerrillamail.com'],
+    color: '#10b981',
+  },
+  {
+    id: 'sharklasers',
+    name: 'SharkLasers',
+    url: 'https://www.guerrillamail.com/',
+    defaultDomain: 'sharklasers.com',
+    availableDomains: ['sharklasers.com', 'fexpost.com', 'fexbox.org'],
+    color: '#06b6d4',
+  },
+];
+
+export const INITIAL_ACCOUNTS: TempEmailAccount[] = [
+  {
+    id: 'acc-tempmailplus-1',
+    address: 'user.jx728@mailto.plus',
+    domain: 'mailto.plus',
+    provider: 'Temp Mail Plus',
+    providerUrl: 'https://tempmail.plus/en/#!',
+    createdAt: 'Active now',
+    expiresInMinutes: 60,
+    latestCode: '849201',
+    messages: [
+      {
+        id: 'msg-1',
+        sender: 'Google Verification',
+        senderAvatar: 'G',
+        fromEmail: 'noreply@google.com',
+        subject: 'Google Verification Code: 849201',
+        snippet: 'Your Google confirmation code is 849201. Use it to complete verification.',
+        receivedAt: '1 min ago',
+        verificationCode: '849201',
+        body: 'Hello,\n\nYour Google verification code is:\n\n849201\n\nValid for 10 minutes. Enter this code on the verification screen to complete sign-up.',
+        isRead: false,
+      },
+    ],
+  },
+  {
+    id: 'acc-fexpost-2',
+    address: 'pro.user99@fexpost.com',
+    domain: 'fexpost.com',
+    provider: 'Temp Mail Plus',
+    providerUrl: 'https://tempmail.plus/en/#!',
+    createdAt: 'Active now',
+    expiresInMinutes: 60,
+    latestCode: '629104',
+    messages: [
+      {
+        id: 'msg-2',
+        sender: 'Facebook Security',
+        senderAvatar: 'F',
+        fromEmail: 'security@facebookmail.com',
+        subject: 'Facebook Confirmation Code: 629104',
+        snippet: 'Enter 629104 in Facebook to verify your identity.',
+        receivedAt: '4 mins ago',
+        verificationCode: '629104',
+        body: 'Hi,\n\nYour Facebook account security confirmation code is 629104. Valid for 15 minutes.',
+        isRead: false,
+      },
+    ],
+  },
+  {
+    id: 'acc-sharklasers-3',
+    address: 'quick.safe@sharklasers.com',
+    domain: 'sharklasers.com',
+    provider: 'SharkLasers',
+    providerUrl: 'https://www.guerrillamail.com/',
+    createdAt: 'Active now',
+    expiresInMinutes: 60,
+    latestCode: '918342',
+    messages: [
+      {
+        id: 'msg-3',
+        sender: 'Binance Security',
+        senderAvatar: 'B',
+        fromEmail: 'do-not-reply@binance.com',
+        subject: 'Authorize Device [Verification Code: 918342]',
+        snippet: 'Your verification code is 918342.',
+        receivedAt: '8 mins ago',
+        verificationCode: '918342',
+        body: 'Device authorization code:\n\n918342\n\nIf you did not request this, secure your account.',
+        isRead: false,
+      },
+    ],
+  },
+];

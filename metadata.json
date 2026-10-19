@@ -1,0 +1,11 @@
+{
+  "name": "Remix Remix Remix Remix Remix Remix Remix Remix Remix Remix Remix Remix Temp Mail \u0026 2FA Quick Action Assistant",
+  "description": "Mobile-friendly Temp Mail management and quick-action floating widget with press-and-hold automatic copy for email, verification code OTP, and TOTP 2FA generator.",
+  "requestFramePermissions": [
+    "clipboard-read",
+    "clipboard-write"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

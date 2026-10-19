@@ -1,0 +1,56 @@
+{
+  "version": 2,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With, Accept" },
+        { "key": "Strict-Transport-Security", "value": "max-age=63072000; includeSubDomains; preload" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate, no-transform" }
+      ]
+    },
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, proxy-revalidate, no-transform" },
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Requested-With, Accept" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/proxy-image",
+      "destination": "/api/proxy-image"
+    },
+    {
+      "source": "/api/facebook/live-check",
+      "destination": "/api/facebook/live-check"
+    },
+    {
+      "source": "/api/instagram/live-check",
+      "destination": "/api/instagram/live-check"
+    },
+    {
+      "source": "/api/tiktok/live-check",
+      "destination": "/api/tiktok/live-check"
+    },
+    {
+      "source": "/api/live-check",
+      "destination": "/api/live-check"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

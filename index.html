@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        // Suppress harmless Vite HMR WebSocket connection closed warnings in dev iframe
+        var origConsoleError = console.error;
+        console.error = function() {
+          var msg = Array.prototype.slice.call(arguments).map(String).join(' ');
+          if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('closed without opened') !== -1 || msg.indexOf('[vite]') !== -1) {
+            return;
+          }
+          return origConsoleError.apply(console, arguments);
+        };
+
+        var origConsoleWarn = console.warn;
+        console.warn = function() {
+          var msg = Array.prototype.slice.call(arguments).map(String).join(' ');
+          if (msg.indexOf('WebSocket') !== -1 || msg.indexOf('closed without opened') !== -1 || msg.indexOf('[vite]') !== -1) {
+            return;
+          }
+          return origConsoleWarn.apply(console, arguments);
+        };
+
+        window.addEventListener('unhandledrejection', function (e) {
+          if (e && e.reason && (String(e.reason).indexOf('WebSocket') !== -1 || String(e.reason).indexOf('closed without opened') !== -1 || String(e.reason).indexOf('[vite]') !== -1)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+        }, true);
+
+        window.addEventListener('error', function (e) {
+          if (e && (String(e.message || '').indexOf('WebSocket') !== -1 ||
+                    String(e.message || '').indexOf('closed without opened') !== -1 ||
+                    String(e.filename || '').indexOf('@vite') !== -1)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+
+        // Provide safe mock for Vite HMR socket so it never throws "WebSocket closed without opened"
+        var OrigWebSocket = window.WebSocket;
+        if (OrigWebSocket) {
+          window.WebSocket = function (url, protocols) {
+            var urlStr = String(url || '');
+            // Only intercept Vite dev server HMR (connecting to current host or containing @vite)
+            if (
+              urlStr.indexOf(window.location.host) !== -1 ||
+              urlStr.indexOf('@vite') !== -1 ||
+              (urlStr.indexOf('run.app') !== -1 && urlStr.indexOf('tempmailpro.io') === -1)
+            ) {
+              var dummy = {
+                readyState: 1, // OPEN
+                close: function () {},
+                send: function () {},
+                addEventListener: function () {},
+                removeEventListener: function () {},
+                dispatchEvent: function () { return false; },
+                onopen: function () {},
+                onclose: function () {},
+                onerror: function () {},
+                onmessage: function () {},
+              };
+              setTimeout(function () {
+                try {
+                  if (typeof dummy.onopen === 'function') {
+                    dummy.onopen({ type: 'open' });
+                  }
+                } catch (_) {}
+              }, 0);
+              return dummy;
+            }
+            return new OrigWebSocket(url, protocols);
+          };
+          window.WebSocket.prototype = OrigWebSocket.prototype;
+        }
+
+        // Early capture of beforeinstallprompt for instant direct 1-click installation
+        window.__pwaInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', function (e) {
+          e.preventDefault();
+          window.__pwaInstallPrompt = e;
+          if (typeof window.__onPWAInstallPrompt === 'function') {
+            try { window.__onPWAInstallPrompt(e); } catch (_) {}
+          }
+        });
+      })();
+    </script>
+    <title>TempMailGo</title>
+    <meta name="description" content="Instant disposable inbox and automatic OTP & 2FA verification code receiver." />
+    <meta name="theme-color" content="#123B92" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TempMailGo" />
+    <meta name="application-name" content="TempMailGo" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <meta property="og:title" content="TempMailGo" />
+    <meta property="og:description" content="Instant disposable inbox and automatic OTP & 2FA verification code receiver." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Dancing+Script:wght@700;900&family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
