@@ -124,7 +124,7 @@ export async function apiGenerateTempEmail(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ provider: detectedProvider, domain: targetDomain, username: cleanUser }),
-      signal: AbortSignal.timeout(1200),
+      signal: AbortSignal.timeout(4500),
     });
 
     if (response.ok) {
@@ -290,8 +290,11 @@ export async function apiFetchInbox(
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('application/json')) {
         const data = await response.json();
-        if (data && data.success && Array.isArray(data.messages) && data.messages.length > 0) {
+        if (data && data.success && Array.isArray(data.messages)) {
           for (const m of data.messages) {
+            if (!m.verificationCode) {
+              m.verificationCode = extractSmartOtpCode(m.subject || '', m.body || '', m.snippet || '', normEmail);
+            }
             if (!messages.some((existing) => existing.id === m.id)) {
               messages.push(m);
             }
@@ -419,26 +422,7 @@ export async function apiFetchInbox(
       }
     } catch {}
 
-    // Fast CORS proxy fallbacks for pure client-side on mobile / Vercel
-    if (!plusData || !plusData.mail_list) {
-      const proxyUrls = [
-        `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
-        `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`,
-      ];
 
-      for (const pUrl of proxyUrls) {
-        try {
-          const proxyRes = await fetch(pUrl, { signal: AbortSignal.timeout(2500) });
-          if (proxyRes.ok) {
-            const parsed = await proxyRes.json();
-            if (parsed && (parsed.mail_list || parsed.result)) {
-              plusData = parsed;
-              break;
-            }
-          }
-        } catch {}
-      }
-    }
 
     if (plusData && plusData.mail_list) {
       const mailList = plusData.mail_list || [];

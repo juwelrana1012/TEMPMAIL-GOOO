@@ -270,27 +270,16 @@ function normalizeNumerals(input: string): string {
  * Specifically optimized for 8-digit confirmation codes, spaced codes, prefixed codes, and Bengali phrases
  */
 function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail = ''): string | null {
-  const cleanHtml = (html || '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"');
-
-  let combined = `${subject || ''}\n${text || ''}\n${cleanHtml}`;
-  combined = normalizeNumerals(combined);
-
   // Strategy 1: Direct input code only if not a full email
   const directCandidate = (text || '').trim();
   const directNormalized = normalizeNumerals(directCandidate);
   if (!directCandidate.includes('@') && directCandidate.length >= 4 && directCandidate.length <= 15) {
-    const directPrefixMatch = directNormalized.match(/^(?:G|FB|VK|TG|MS|ID)[-\s]?([0-9]{4,8})$/i);
+    const directPrefixMatch = directNormalized.match(/^(?:G|FB|VK|TG|MS|ID|IG)[-\s]?([0-9]{4,8})$/i);
     if (directPrefixMatch && directPrefixMatch[1]) {
       return directPrefixMatch[1];
     }
 
-    const strippedOnlyDigits = directNormalized.replace(/[\s\-_[\]().:]/g, '');
+    const strippedOnlyDigits = directNormalized.replace(/[\s\-_[\]().:<>]/g, '');
     if (/^[0-9]{4,8}$/.test(strippedOnlyDigits)) {
       const num = parseInt(strippedOnlyDigits, 10);
       if (!(strippedOnlyDigits.length === 4 && num >= 2020 && num <= 2030)) {
@@ -298,6 +287,25 @@ function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail =
       }
     }
   }
+
+  // Pre-process angle-bracketed numbers so <123456> or <123 456> are NEVER stripped as HTML tags!
+  const unwrapAngleBrackets = (str: string) =>
+    (str || '').replace(/<([0-9]{3,8}(?:[\s-][0-9]{3,8})?)>/g, ' $1 ');
+
+  const unwrapSubject = unwrapAngleBrackets(subject);
+  const unwrapText = unwrapAngleBrackets(text);
+  const unwrapHtml = unwrapAngleBrackets(html);
+
+  const cleanHtml = unwrapHtml
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&(?:nbsp|#160|#8239);/gi, ' ')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"');
+
+  let combined = `${unwrapSubject}\n${unwrapText}\n${cleanHtml}`;
+  combined = normalizeNumerals(combined);
 
   // 1. CRITICAL SANITIZATION:
   // Strip recipient username and digits (e.g. user84920193@tempmailpro.io)
@@ -335,9 +343,9 @@ function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail =
   combined = combined.replace(/(?:facebook\s*id|fb\s*id|user\s*id|account\s*id|client\s*id|device\s*id|session\s*id|login\s*id|post\s*id|message\s*id|\bid)[\s:#*-]+[0-9]{4,20}/gi, ' [ID_STRIPPED] ');
   combined = combined.replace(/(?:ref(?:erence)?|tracking|case|ticket|order|invoice)[\s:#*-]+[0-9]{4,20}/gi, ' [REF_ID] ');
 
-  const cleanVal = (v: string) => (v || '').replace(/[\s\-_[\]().:]/g, '');
+  const cleanVal = (v: string) => (v || '').replace(/[\s\-_[\]().:<>]/g, '');
 
-  // 2. Prefixed codes: FB-84920193, G-84920193, MS-84920193, TG-12345 (Exclude ID to prevent matching user/account IDs)
+  // 2. Prefixed codes: FB-84920193, G-84920193, MS-84920193, TG-12345, IG-123456
   const prefixMatch = combined.match(/\b(?:FB|G|VK|TG|MS|IG|DC|EA)[-\s]?([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i);
   if (prefixMatch && prefixMatch[1]) {
     const cleaned = cleanVal(prefixMatch[1]);
@@ -346,7 +354,7 @@ function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail =
 
   // 3. Subject line code
   if (subject) {
-    const sClean = normalizeNumerals(subject)
+    const sClean = normalizeNumerals(unwrapSubject)
       .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, ' ')
       .replace(/https?:\/\/[^\s"'<>]+/gi, ' ')
       .replace(/(?:facebook\s*id|user\s*id|account\s*id|\bid)[\s:#*-]+[0-9]{4,20}/gi, ' ');
@@ -357,8 +365,21 @@ function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail =
       if (c.length >= 4 && c.length <= 8) return c;
     }
 
+    // Specific Instagram subject matchers:
+    // "<123456> is your Instagram code", "123 456 is your Instagram code", "Your Instagram code is 123456"
+    const sInstagram = sClean.match(
+      /(?:(?:your\s+)?(?:instagram|insta|ig|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড)[\s:—–=is#*হলো-]+([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})|([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b[\s\r\n]+(?:is\s+your|to\s+confirm|to\s+verify|to\s+reset|to\s+recover|হলো\s+আপনার)[\s\w-]{0,25}?(?:instagram|insta|ig|account|ইনস্টাগ্রাম))/i
+    );
+    if (sInstagram) {
+      const codeFound = sInstagram[1] || sInstagram[2];
+      if (codeFound) {
+        const c = cleanVal(codeFound);
+        if (c.length >= 4 && c.length <= 8) return c;
+      }
+    }
+
     const sExplicit = sClean.match(
-      /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|microsoft|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s:—–=is#*হলো-]+|(?:use|enter|type|input)\s+[^:0-9\n\r]{0,35}?(?:code|confirm|verify)[\s:—–=is#*-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i
+      /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|instagram|microsoft|google|binance|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s:—–=is#*হলো-]+|(?:use|enter|type|input)\s+[^:0-9\n\r]{0,35}?(?:code|confirm|verify)[\s:—–=is#*-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i
     );
     if (sExplicit && sExplicit[1]) {
       const c = cleanVal(sExplicit[1]);
@@ -380,12 +401,20 @@ function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail =
     }
   }
 
-  // 4. Dedicated High-Priority Confirmation & Security Patterns (Allows newlines & spaced 8-digit codes)
+  // 4. Dedicated High-Priority Confirmation & Security Patterns (Allows newlines & spaced codes)
   const dedicatedRecoveryPatterns = [
-    /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|microsoft|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s\r\n:—–=is#*হলো-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    // Instagram specific: "your Instagram code is 123456", "123 456 is your Instagram code"
+    /(?:(?:your\s+)?(?:instagram|insta|ig|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড)[\s\r\n:—–=is#*হলো-]+)([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    /\b([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b[\s\r\n]+(?:is\s+your\s+(?:instagram|insta|ig|security|confirmation|verification)\s+code|is\s+your\s+code|হলো\s+আপনার\s+ইনস্টাগ্রাম)/i,
+    // "confirmation verification code: 8492 0193", "8-digit confirmation code: 84920193", "Facebook confirmation code: 84920193"
+    /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|instagram|microsoft|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s\r\n:—–=is#*হলো-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    // "use this 8-digit code to confirm: 8492 0193", "enter this code to verify: 84920193"
     /(?:(?:use|enter|type|input)\s+[^:0-9\n\r]{0,35}?(?:code|confirm|verify)[\s\r\n:—–=is#*-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    // "code for account recovery: 84920193", "code to confirm your account: 84920193"
     /(?:code\s+(?:for|to|is|in)\s+[^:0-9\n\r]{1,40})[\s\r\n:—–=is#*-]+([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    // "your 8-digit code is: 84920193", "your single-use code: 84920193"
     /(?:your|the)\s+(?:single-use\s+|one-time\s+|8-digit\s+|eight-digit\s+)?(?:code|otp|passcode|pin)[\s\r\n:—–=is#*-]+([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    // Reverse format: "8492 0193 is your confirmation code", "84920193 is your Facebook confirmation code", "৮৪৯২০১৯৩ হলো আপনার কনফার্মেশন কোড"
     /\b([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b[\s\r\n]+(?:is\s+your|to\s+confirm|to\s+verify|to\s+reset|to\s+recover|for\s+recovery|for\s+verification|is\s+the\s+code|হলো\s+আপনার|কোডটি\s+ব্যবহার)/i,
   ];
 
@@ -428,11 +457,22 @@ function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail =
     }
   }
 
-  // 7. Search for spaced 8-digit OTPs (e.g. "8492 0193")
+  // 7. Search for spaced 8-digit OTPs (e.g. "8492 0193") OR spaced 6-digit OTPs (e.g. Instagram "123 456")
   const matchSpaced = combined.match(/\b([0-9]{4})[\s-]([0-9]{4})\b/);
   if (matchSpaced && matchSpaced[1] && matchSpaced[2]) {
     const joined = `${matchSpaced[1]}${matchSpaced[2]}`;
     if (!joined.startsWith('202') && !joined.startsWith('199')) {
+      return joined;
+    }
+  }
+
+  // Spaced 6-digit OTP (Instagram, WhatsApp, Discord)
+  const matchSpaced6 = combined.match(/\b([0-9]{3})[\s-]([0-9]{3})\b/);
+  if (matchSpaced6 && matchSpaced6[1] && matchSpaced6[2]) {
+    const joined = `${matchSpaced6[1]}${matchSpaced6[2]}`;
+    const idx = matchSpaced6.index ?? 0;
+    const surrounding = combined.substring(Math.max(0, idx - 50), Math.min(combined.length, idx + 60)).toLowerCase();
+    if (/instagram|insta|ig|facebook|whatsapp|verify|code|otp|confirm|security|লগইন|কোড/.test(surrounding)) {
       return joined;
     }
   }
@@ -464,11 +504,11 @@ function extractRealOtpCode(subject = '', text = '', html = '', recipientEmail =
 
     let score = 0;
     if (val.length === 8) score += 40;
-    else if (val.length === 6) score += 25;
-    else if (val.length === 5) score += 15;
-    else score += 8;
+    else if (val.length === 6) score += 35;
+    else if (val.length === 5) score += 20;
+    else score += 10;
 
-    if (/confirmation|security|recovery|verify|confirm|microsoft|facebook|single-use|code|otp|কোড|ওটিপি/.test(surrounding)) {
+    if (/confirmation|security|recovery|verify|confirm|microsoft|facebook|instagram|insta|ig|google|binance|single-use|code|otp|কোড|ওটিপি/.test(surrounding)) {
       score += 45;
     }
 
@@ -770,6 +810,21 @@ app.post('/api/tempmail/generate', async (req, res) => {
       const address = `${cleanUser}@${targetDomain}`;
       LOCAL_INBOXES.set(address.toLowerCase(), []);
 
+      // Asynchronously prime and activate mailbox with 48h TTL on TempMailPlus
+      (async () => {
+        try {
+          await axios.get('https://tempmail.plus/api/box', {
+            params: { email: address, epin: '' },
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            },
+            timeout: 3000,
+          });
+        } catch {}
+      })();
+
       return res.json({
         success: true,
         address,
@@ -1020,79 +1075,99 @@ app.get('/api/tempmail/inbox', async (req, res) => {
       email.includes('mailto.plus');
 
     if (isTempMailPlus) {
-      try {
-        const response = await axios.get('https://tempmail.plus/api/mails', {
-          params: { email, limit: 20, epin: '' },
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-          },
-          timeout: 8000,
-        });
-
-        const rawList = response.data?.mail_list || [];
-
-        for (const item of rawList) {
-          let textBody = '';
-          let htmlBody = '';
-
-          // Fetch full message body if mail_id is present
-          if (item.mail_id) {
-            try {
-              const detailRes = await axios.get(
-                `https://tempmail.plus/api/mails/${item.mail_id}`,
-                {
-                  params: { email, epin: '' },
-                  headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-                  },
-                  timeout: 6000,
-                }
-              );
-              if (detailRes.data) {
-                textBody = detailRes.data.text || '';
-                htmlBody = detailRes.data.html || '';
-              }
-            } catch {
-              // ignore detail fetch error
-            }
-          }
-
-          const extractedCode = extractRealOtpCode(
-            item.subject || '',
-            textBody,
-            htmlBody
-          );
-
-          if (!latestCode && extractedCode) {
-            latestCode = extractedCode;
-          }
-
-          const senderName = item.from_name || (item.from_mail ? item.from_mail.split('@')[0] : 'Sender');
-          const senderEmail = item.from_mail || item.from || '';
-
-          const alreadyExists = messages.some((m) => m.id === String(item.mail_id));
-          if (!alreadyExists) {
-            messages.push({
-              id: String(item.mail_id || Math.random()),
-              sender: senderName,
-              senderAvatar: senderName.charAt(0).toUpperCase() || 'M',
-              fromEmail: senderEmail,
-              subject: item.subject || '(No Subject)',
-              snippet: textBody ? textBody.substring(0, 140) : item.subject || '',
-              receivedAt: item.time || 'Just now',
-              verificationCode: extractedCode,
-              body: textBody || htmlBody || '(No text content)',
-              isRead: false,
-            });
+      const targets = new Set<string>();
+      targets.add(email);
+      if (userPart) {
+        const cleanU = userPart.replace(/[^a-z0-9]/g, '');
+        if (cleanU && cleanU !== email) {
+          targets.add(cleanU);
+          if (domainPart !== 'mailto.plus') {
+            targets.add(`${cleanU}@mailto.plus`);
           }
         }
-      } catch (plusErr: any) {
-        console.warn('Temp Mail Plus fetch warning:', plusErr?.message);
       }
+
+      await Promise.allSettled(
+        Array.from(targets).map(async (targetMail) => {
+          try {
+            const response = await axios.get('https://tempmail.plus/api/mails', {
+              params: { email: targetMail, limit: 20, epin: '' },
+              headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              },
+              timeout: 6000,
+            });
+
+            const rawList = response.data?.mail_list || [];
+
+            for (const item of rawList) {
+              let textBody = '';
+              let htmlBody = '';
+
+              if (item.mail_id) {
+                try {
+                  const detailRes = await axios.get(
+                    `https://tempmail.plus/api/mails/${item.mail_id}`,
+                    {
+                      params: { email: targetMail, epin: '' },
+                      headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                      },
+                      timeout: 4000,
+                    }
+                  );
+                  if (detailRes.data && detailRes.data.result !== false) {
+                    textBody = detailRes.data.text || '';
+                    htmlBody = detailRes.data.html || '';
+                  }
+                } catch {
+                  // ignore detail fetch error
+                }
+              }
+
+              const bodySnippet = textBody || item.text || item.snippet || item.mail_excerpt || '';
+              const bodyHtml = htmlBody || item.html || '';
+
+              const extractedCode = extractRealOtpCode(
+                item.subject || '',
+                bodySnippet,
+                bodyHtml,
+                email
+              );
+
+              if (!latestCode && extractedCode) {
+                latestCode = extractedCode;
+              }
+
+              const senderName = item.from_name || (item.from_mail ? item.from_mail.split('@')[0] : 'Sender');
+              const senderEmail = item.from_mail || item.from || '';
+
+              const alreadyExists = messages.some((m) => m.id === String(item.mail_id));
+              if (!alreadyExists) {
+                messages.push({
+                  id: String(item.mail_id || Math.random()),
+                  sender: senderName,
+                  senderAvatar: senderName.charAt(0).toUpperCase() || 'M',
+                  fromEmail: senderEmail,
+                  subject: item.subject || '(No Subject)',
+                  snippet: (bodySnippet || item.subject || '').substring(0, 140),
+                  receivedAt: item.time || 'Just now',
+                  verificationCode: extractedCode,
+                  body: textBody || htmlBody || bodySnippet || '(No text content)',
+                  isRead: false,
+                  timestamp: item.time ? Date.parse(item.time) : Date.now(),
+                });
+              }
+            }
+          } catch (plusErr: any) {
+            console.warn('Temp Mail Plus fetch warning:', plusErr?.message);
+          }
+        })
+      );
     }
 
     // D. Check Mail.cx Official API (https://api.mail.cx/v1)
@@ -1470,6 +1545,12 @@ app.post('/api/tempmail/send-test', (req, res) => {
       sender = 'Facebook';
       fromEmail = 'security@facebookmail.com';
       body = `Hi,\n\nHere is your security confirmation code:\n\n${generatedCode}\n\nEnter this code on Facebook to confirm your action.`;
+    } else if (service.toLowerCase().includes('instagram') || service.toLowerCase().includes('insta')) {
+      const spaced = `${generatedCode.substring(0, 3)} ${generatedCode.substring(3)}`;
+      subject = `<${generatedCode}> is your Instagram code`;
+      sender = 'Instagram';
+      fromEmail = 'security@mail.instagram.com';
+      body = `Hi,\n\n<${generatedCode}> is your Instagram security code. Don't share it.\n\n${spaced}\n\nEnter this code in Instagram to verify your account.`;
     } else {
       subject = `Your verification code is ${generatedCode}`;
       sender = service;
@@ -1878,7 +1959,9 @@ const handleRecoveryCode = async (req: express.Request, res: express.Response) =
             }
           }
 
-          const extractedCode = extractRealOtpCode(item.subject || '', textBody, htmlBody);
+          const bodySnippet = textBody || item.text || item.snippet || item.mail_excerpt || '';
+          const bodyHtml = htmlBody || item.html || '';
+          const extractedCode = extractRealOtpCode(item.subject || '', bodySnippet, bodyHtml, email);
           const itemId = String(item.mail_id || Math.random());
           if (!allFoundMessages.some((m) => m.id === itemId)) {
             allFoundMessages.push({

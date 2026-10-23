@@ -31,12 +31,12 @@ function extractSmartOtpCode(
 
   const isDirectEmail = directCandidate.includes('@') && !directCandidate.includes(' ');
   if (!isDirectEmail && directCandidate.length >= 4 && directCandidate.length <= 15) {
-    const directPrefixMatch = directNormalized.match(/^(?:G|FB|VK|TG|MS|ID)[-\s]?([0-9]{4,8})$/i);
+    const directPrefixMatch = directNormalized.match(/^(?:G|FB|VK|TG|MS|ID|IG)[-\s]?([0-9]{4,8})$/i);
     if (directPrefixMatch && directPrefixMatch[1]) {
       return directPrefixMatch[1];
     }
 
-    const strippedOnlyDigits = directNormalized.replace(/[\s\-_[\]().:]/g, '');
+    const strippedOnlyDigits = directNormalized.replace(/[\s\-_[\]().:<>]/g, '');
     if (/^[0-9]{4,8}$/.test(strippedOnlyDigits)) {
       const num = parseInt(strippedOnlyDigits, 10);
       if (!(strippedOnlyDigits.length === 4 && num >= 2020 && num <= 2030)) {
@@ -45,15 +45,23 @@ function extractSmartOtpCode(
     }
   }
 
-  const cleanHtml = (html || '')
+  // Pre-process angle-bracketed numbers so <123456> or <123 456> are NEVER stripped as HTML tags!
+  const unwrapAngleBrackets = (str: string) =>
+    (str || '').replace(/<([0-9]{3,8}(?:[\s-][0-9]{3,8})?)>/g, ' $1 ');
+
+  const unwrapSubject = unwrapAngleBrackets(subject);
+  const unwrapText = unwrapAngleBrackets(text);
+  const unwrapHtml = unwrapAngleBrackets(html);
+
+  const cleanHtml = unwrapHtml
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&(?:nbsp|#160|#8239);/gi, ' ')
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"');
 
-  let combined = `${subject || ''}\n${text || ''}\n${cleanHtml}`;
+  let combined = `${unwrapSubject}\n${unwrapText}\n${cleanHtml}`;
   combined = normalizeNumerals(combined);
 
   // Strip recipient username and digits
@@ -83,7 +91,7 @@ function extractSmartOtpCode(
   combined = combined.replace(/(?:facebook\s*id|fb\s*id|user\s*id|account\s*id|client\s*id|device\s*id|session\s*id|login\s*id|post\s*id|message\s*id|\bid)[\s:#*-]+[0-9]{4,20}/gi, ' [ID_STRIPPED] ');
   combined = combined.replace(/(?:ref(?:erence)?|tracking|case|ticket|order|invoice)[\s:#*-]+[0-9]{4,20}/gi, ' [REF_ID] ');
 
-  const cleanVal = (v: string) => (v || '').replace(/[\s\-_[\]().:]/g, '');
+  const cleanVal = (v: string) => (v || '').replace(/[\s\-_[\]().:<>]/g, '');
 
   const prefixMatch = combined.match(/\b(?:FB|G|VK|TG|MS|IG|DC|EA)[-\s]?([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i);
   if (prefixMatch && prefixMatch[1]) {
@@ -92,7 +100,7 @@ function extractSmartOtpCode(
   }
 
   if (subject) {
-    const sClean = normalizeNumerals(subject)
+    const sClean = normalizeNumerals(unwrapSubject)
       .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, ' ')
       .replace(/https?:\/\/[^\s"'<>]+/gi, ' ')
       .replace(/(?:facebook\s*id|user\s*id|account\s*id|\bid)[\s:#*-]+[0-9]{4,20}/gi, ' ');
@@ -103,8 +111,21 @@ function extractSmartOtpCode(
       if (c.length >= 4 && c.length <= 8) return c;
     }
 
+    // Specific Instagram subject matchers:
+    // "<123456> is your Instagram code", "123 456 is your Instagram code", "Your Instagram code is 123456"
+    const sInstagram = sClean.match(
+      /(?:(?:your\s+)?(?:instagram|insta|ig|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড)[\s:—–=is#*হলো-]+([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})|([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b[\s\r\n]+(?:is\s+your|to\s+confirm|to\s+verify|to\s+reset|to\s+recover|হলো\s+আপনার)[\s\w-]{0,25}?(?:instagram|insta|ig|account|ইনস্টাগ্রাম))/i
+    );
+    if (sInstagram) {
+      const codeFound = sInstagram[1] || sInstagram[2];
+      if (codeFound) {
+        const c = cleanVal(codeFound);
+        if (c.length >= 4 && c.length <= 8) return c;
+      }
+    }
+
     const sExplicit = sClean.match(
-      /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|microsoft|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s:—–=is#*হলো-]+|(?:use|enter|type|input)\s+[^:0-9\n\r]{0,35}?(?:code|confirm|verify)[\s:—–=is#*-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i
+      /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|instagram|microsoft|google|binance|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s:—–=is#*হলো-]+|(?:use|enter|type|input)\s+[^:0-9\n\r]{0,35}?(?:code|confirm|verify)[\s:—–=is#*-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i
     );
     if (sExplicit && sExplicit[1]) {
       const c = cleanVal(sExplicit[1]);
@@ -127,7 +148,10 @@ function extractSmartOtpCode(
   }
 
   const highPriorityPatterns = [
-    /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|microsoft|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s\r\n:—–=is#*হলো-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    // Instagram specific
+    /(?:(?:your\s+)?(?:instagram|insta|ig|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড)[\s\r\n:—–=is#*হলো-]+)([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
+    /\b([0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b[\s\r\n]+(?:is\s+your\s+(?:instagram|insta|ig|security|confirmation|verification)\s+code|is\s+your\s+code|হলো\s+আপনার\s+ইনস্টাগ্রাম)/i,
+    /(?:(?:8[\s-]?(?:digit|ডিজিট)|eight[\s-]?digit)?\s*(?:confirmation|verification|security|recovery|single-use|one-time|identity|access|login|facebook|instagram|microsoft|কনফার্মেশন|ভেরিফিকেশন|নিরাপত্তা|রিকভারি|লগইন|ইনস্টাগ্রাম)[\s\w-]{0,35}?(?:code|otp|passcode|pin|কোড|ওটিপি|পিন)[\s\r\n:—–=is#*হলো-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
     /(?:(?:use|enter|type|input)\s+[^:0-9\n\r]{0,35}?(?:code|confirm|verify)[\s\r\n:—–=is#*-]+)([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
     /(?:code\s+(?:for|to|is|in)\s+[^:0-9\n\r]{1,40})[\s\r\n:—–=is#*-]+([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
     /(?:your|the)\s+(?:single-use\s+|one-time\s+|8-digit\s+|eight-digit\s+)?(?:code|otp|passcode|pin)[\s\r\n:—–=is#*-]+([0-9]{4}[\s-]?[0-9]{4}|[0-9]{3}[\s-]?[0-9]{3}|[0-9]{4,8})\b/i,
@@ -171,10 +195,22 @@ function extractSmartOtpCode(
     }
   }
 
-  const genSpaced = combined.match(/\b([0-9]{4})[\s-]([0-9]{4})\b/);
-  if (genSpaced && genSpaced[1] && genSpaced[2]) {
-    const joined = `${genSpaced[1]}${genSpaced[2]}`;
+  // Spaced 8-digit OTP
+  const genSpaced8 = combined.match(/\b([0-9]{4})[\s-]([0-9]{4})\b/);
+  if (genSpaced8 && genSpaced8[1] && genSpaced8[2]) {
+    const joined = `${genSpaced8[1]}${genSpaced8[2]}`;
     if (!joined.startsWith('202') && !joined.startsWith('199')) {
+      return joined;
+    }
+  }
+
+  // Spaced 6-digit OTP (Instagram, WhatsApp, Discord)
+  const genSpaced6 = combined.match(/\b([0-9]{3})[\s-]([0-9]{3})\b/);
+  if (genSpaced6 && genSpaced6[1] && genSpaced6[2]) {
+    const joined = `${genSpaced6[1]}${genSpaced6[2]}`;
+    const idx = genSpaced6.index ?? 0;
+    const surrounding = combined.substring(Math.max(0, idx - 50), Math.min(combined.length, idx + 60)).toLowerCase();
+    if (/instagram|insta|ig|facebook|whatsapp|verify|code|otp|confirm|security|লগইন|কোড/.test(surrounding)) {
       return joined;
     }
   }
@@ -208,11 +244,11 @@ function extractSmartOtpCode(
 
     let score = 0;
     if (val.length === 8) score += 40;
-    else if (val.length === 6) score += 25;
-    else if (val.length === 5) score += 15;
-    else score += 8;
+    else if (val.length === 6) score += 35;
+    else if (val.length === 5) score += 20;
+    else score += 10;
 
-    if (/confirmation|security|recovery|verify|confirm|microsoft|facebook|single-use|code|otp|কোড|ওটিপি/.test(surrounding)) {
+    if (/confirmation|security|recovery|verify|confirm|microsoft|facebook|instagram|insta|ig|google|binance|single-use|code|otp|কোড|ওটিপি/.test(surrounding)) {
       score += 45;
     }
 
@@ -339,8 +375,11 @@ export default async function handler(req: any, res: any) {
     // 2. Check Temp Mail Plus inboxes in parallel
     const tempMailTargets = new Set<string>();
     tempMailTargets.add(email);
-    if (cleanUser && domainPart !== 'mailto.plus') {
-      tempMailTargets.add(`${cleanUser}@mailto.plus`);
+    if (cleanUser) {
+      tempMailTargets.add(cleanUser);
+      if (domainPart !== 'mailto.plus') {
+        tempMailTargets.add(`${cleanUser}@mailto.plus`);
+      }
     }
 
     const tempMailPromises = Array.from(tempMailTargets).map(async (targetMail) => {
@@ -350,7 +389,7 @@ export default async function handler(req: any, res: any) {
           headers: {
             'X-Requested-With': 'XMLHttpRequest',
             'Accept': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           },
           signal: AbortSignal.timeout(6000),
         });
@@ -370,6 +409,7 @@ export default async function handler(req: any, res: any) {
                   headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
                   },
                   signal: AbortSignal.timeout(4000),
                 });
@@ -381,12 +421,19 @@ export default async function handler(req: any, res: any) {
               } catch {}
             }
 
+            const bodySnippet = textBody || item.text || item.snippet || '';
+            const bodyHtml = htmlBody || item.html || '';
+
             const code = extractSmartOtpCode(
               item.subject || '',
-              textBody || item.text || item.snippet || '',
-              htmlBody || item.html || '',
+              bodySnippet,
+              bodyHtml,
               email
             );
+
+            if (!latestCode && code) {
+              latestCode = code;
+            }
 
             const senderName = item.from_name || (item.from_mail ? item.from_mail.split('@')[0] : 'Sender');
             const senderEmail = item.from_mail || '';
@@ -398,10 +445,10 @@ export default async function handler(req: any, res: any) {
               senderAvatar: senderName.charAt(0).toUpperCase() || 'M',
               fromEmail: senderEmail,
               subject: item.subject || 'Verification Email',
-              snippet: (textBody || item.snippet || item.subject || '').substring(0, 140),
+              snippet: (bodySnippet || item.subject || '').substring(0, 140),
               receivedAt: item.time || 'Just now',
               verificationCode: code,
-              body: textBody || htmlBody || item.subject || '',
+              body: textBody || htmlBody || bodySnippet || item.subject || '',
               isRead: false,
               timestamp,
             });

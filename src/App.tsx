@@ -400,6 +400,15 @@ export default function App() {
             !m.sender?.toLowerCase().includes('guerrillamail') &&
             !m.subject?.toLowerCase().includes('welcome to guerrilla')
         )
+        .map((m) => {
+          if (!m.verificationCode) {
+            const parsedCode = extractSmartOtpCode(m.subject || '', m.body || '', m.snippet || '', account.address);
+            if (parsedCode) {
+              return { ...m, verificationCode: parsedCode };
+            }
+          }
+          return m;
+        })
         .sort((a, b) => {
           const getSafeTime = (m: any): number => {
             if (typeof m.timestamp === 'number' && !isNaN(m.timestamp) && m.timestamp > 0) return m.timestamp;

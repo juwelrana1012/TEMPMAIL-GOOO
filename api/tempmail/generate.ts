@@ -52,6 +52,22 @@ export default async function handler(req: any, res: any) {
       })();
     }
 
+    // If Temp Mail Plus, activate mailbox with 48h TTL in background (non-blocking)
+    if (targetDomain.includes('mailto.plus') || providerName === 'Temp Mail Plus') {
+      (async () => {
+        try {
+          await fetch(`https://tempmail.plus/api/box?email=${encodeURIComponent(address)}&epin=`, {
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json',
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            },
+            signal: AbortSignal.timeout(3000),
+          });
+        } catch {}
+      })();
+    }
+
     let providerUrl = `https://tempmail.plus/en/#!${cleanUser}@${targetDomain}`;
     if (providerName === 'Guerrilla Mail' || providerName === 'SharkLasers') {
       providerUrl = 'https://www.guerrillamail.com/';
